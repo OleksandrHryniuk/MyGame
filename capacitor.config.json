@@ -1,0 +1,8 @@
+{
+  "appId": "com.oleksandrhryniuk.bananahunter",
+  "appName": "Banana Hunter",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  }
+}

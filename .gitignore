@@ -1,0 +1,15 @@
+# Node / Capacitor
+node_modules/
+www/
+android/
+
+# Portable build toolchain (downloaded SDKs live outside the repo, but ignore just in case)
+.build-tools/
+
+# Built artifacts / logs
+*.apk
+build-log.txt
+
+# OS / editor
+Thumbs.db
+.DS_Store
