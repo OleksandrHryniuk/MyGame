@@ -1,4 +1,20 @@
-var game = new Phaser.Game(700,400, Phaser.Auto, 'phaser-example', {preload:preload, create:create, update:update, render:render});
+// Fill-screen fix: size the canvas to the device's landscape aspect ratio instead
+// of a fixed 700x400, so wide phone screens don't show black pillarbox bars.
+// Clamped: never below 700 (keeps the ground/tilemap, which is only 700px wide,
+// fully under the player) and never above 1100 (keeps spawn gaps reasonable).
+// Recomputed on resize/orientation change (see onWindowResize) since the ratio
+// can change after load (device rotated, devtools device switched, etc).
+var GAME_HEIGHT = 400;
+function computeGameWidth()
+{
+    var w = Math.round(GAME_HEIGHT * (window.innerWidth / window.innerHeight));
+    if (w < 700) w = 700;
+    if (w > 1100) w = 1100;
+    return w;
+}
+var GAME_WIDTH = computeGameWidth();
+
+var game = new Phaser.Game(GAME_WIDTH, GAME_HEIGHT, Phaser.Auto, 'phaser-example', {preload:preload, create:create, update:update, render:render});
 
 // Tunable game configuration (speed curve lives here)
 var config = {
@@ -25,7 +41,8 @@ var state = {
     doubleJump: true,
     endAnimPlayed: false,
     pausePlayerVelocityY: 0,
-    rand: 0
+    rand: 0,
+    outsidePointerDown: false // tap held down outside the canvas (letterbox area) — see jumpPressed()
 };
 
 // World entities / physics objects
@@ -69,6 +86,9 @@ function preload()
 function create()
 {
     game.physics.startSystem(Phaser.Physics.ARCADE);
+    // Match the sky color (stable sky shade of bground.png, not the 1px anti-aliased
+    // top edge) so any letterbox/pillarbox area blends in instead of showing black
+    game.stage.backgroundColor = '#cdc8ff';
 
     // A2: responsive scaling — keep aspect ratio, fit any screen, centered
     game.scale.scaleMode = Phaser.ScaleManager.SHOW_ALL;
@@ -80,7 +100,7 @@ function create()
     game.scale.leaveIncorrectOrientation.add(onCorrectOrientation, this);
     game.scale.refresh();
 
-    world.bground = game.add.tileSprite(0,0,700,400,'bground');
+    world.bground = game.add.tileSprite(0,0,GAME_WIDTH,GAME_HEIGHT,'bground');
 
     world.player = game.add.sprite(30, 316, 'player', 1);
     game.physics.enable(world.player, Phaser.Physics.ARCADE);
@@ -133,6 +153,56 @@ function create()
     sounds.jump = game.add.audio('jump_sound', 1, false);
     sounds.coin = game.add.audio('coin_sound', 1, false);
     sounds.fall = game.add.audio('fall_sound', 1, false);
+
+    // Recompute canvas width and reposition anchored UI whenever the window/orientation changes
+    window.addEventListener('resize', onWindowResize);
+    window.addEventListener('orientationchange', onWindowResize);
+}
+
+// Debounced: rotation/resize fires many events in quick succession
+var resizeDebounce;
+function onWindowResize()
+{
+    clearTimeout(resizeDebounce);
+    resizeDebounce = setTimeout(applyResize, 150);
+}
+
+function applyResize()
+{
+    var newWidth = computeGameWidth();
+    if (newWidth !== GAME_WIDTH)
+    {
+        GAME_WIDTH = newWidth;
+        game.scale.setGameSize(GAME_WIDTH, GAME_HEIGHT);
+        world.bground.width = GAME_WIDTH;
+        layoutUI();
+    }
+    game.scale.refresh();
+}
+
+// Reposition every UI element anchored to world center/edges (called after a resize)
+function layoutUI()
+{
+    ui.loseText.x = game.world.centerX-80;
+    ui.loseText.y = game.world.centerY-70;
+    ui.loseScore.x = game.world.centerX-100;
+    ui.loseScore.y = game.world.centerY+10;
+    ui.gameName1.x = game.world.centerX-155;
+    ui.gameName1.y = game.world.centerY-100;
+    ui.gameName2.x = game.world.centerX-153;
+    ui.gameName2.y = game.world.centerY-40;
+    ui.pauseText.x = game.world.centerX-100;
+    ui.pauseText.y = game.world.centerY;
+    ui.replayButton.x = game.world.centerX-50;
+    ui.replayButton.y = game.world.centerY+70;
+    ui.startButton.x = game.world.centerX-50;
+    ui.startButton.y = game.world.centerY+50;
+    ui.infoButton.x = game.world.width-50;
+    ui.infoButton.y = game.world.height-50;
+    ui.pauseButton.x = game.world.width-70;
+    ui.pauseButton.y = 10;
+    ui.infoImage.x = game.world.centerX-132;
+    ui.infoImage.y = 10;
 }
 
 // Delay before the next spawn, based on current speed and clamped to a floor
@@ -145,11 +215,32 @@ function spawnDelay()
 function jumpPressed()
 {
     if(world.jumpkey.isDown) return true;
+    if(state.outsidePointerDown) return true;
     var p = game.input.activePointer;
     if(!p.isDown) return false;
     if(overButton(ui.pauseButton, p) || overButton(ui.infoButton, p)) return false;
     return true;
 }
+
+// UX: the letterbox area (top/bottom bars outside the canvas) is color-matched to look
+// like part of the same scene, so players expect it to be tappable too. Phaser only
+// listens for input on the canvas itself, so these document-level listeners extend
+// tap-to-jump to the whole page instead of leaving a confusing "dead" area.
+function onOutsidePointerDown(e)
+{
+    if (e.target && e.target.tagName === 'CANVAS') return; // canvas taps already handled above
+    state.outsidePointerDown = true;
+    e.preventDefault();
+}
+function onOutsidePointerUp()
+{
+    state.outsidePointerDown = false;
+}
+document.addEventListener('mousedown', onOutsidePointerDown);
+document.addEventListener('mouseup', onOutsidePointerUp);
+document.addEventListener('touchstart', onOutsidePointerDown, { passive: false });
+document.addEventListener('touchend', onOutsidePointerUp);
+document.addEventListener('touchcancel', onOutsidePointerUp);
 
 function overButton(btn, p)
 {
@@ -236,14 +327,14 @@ function update()
 
 function create_banana_scin()
 {
-    world.scin = world.bananaScin.create(699, 355, 'banana_scin');
+    world.scin = world.bananaScin.create(GAME_WIDTH - 1, 355, 'banana_scin');
     world.scin.body.setSize(30, 25, 30, 0);
     world.scin.body.gravity = 0;
 }
 
 function create_banana()
 {
-    var banana = world.bananaClear.create(699, game.rnd.integerInRange(0,160)+150, 'banana');
+    var banana = world.bananaClear.create(GAME_WIDTH - 1, game.rnd.integerInRange(0,160)+150, 'banana');
     banana.body.setSize(35,50,3,1);
     banana.body.gravity = 0;
 }

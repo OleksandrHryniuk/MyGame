@@ -1,0 +1,25 @@
+{
+  "name": "Banana Hunter",
+  "short_name": "Banana Hunter",
+  "description": "An endless runner where you jump to collect bananas and dodge skins.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#cdc8ff",
+  "theme_color": "#cdc8ff",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

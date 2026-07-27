@@ -8,7 +8,11 @@
 	<meta name="mobile-web-app-capable" content="yes">
 	<meta name="apple-mobile-web-app-capable" content="yes">
 	<meta name="apple-mobile-web-app-status-bar-style" content="black">
-	<meta name="theme-color" content="#000000">
+	<meta name="theme-color" content="#cdc8ff">
+	<!-- B1/B4: PWA manifest + icons -->
+	<link rel="manifest" href="manifest.json">
+	<link rel="icon" href="icons/icon-192.png">
+	<link rel="apple-touch-icon" href="icons/icon-192.png">
 	<style>
 		/* A5: kill default touch behaviours (scroll, pinch-zoom, tap highlight, text select) */
 		* { -webkit-tap-highlight-color: rgba(0,0,0,0); }
@@ -17,7 +21,12 @@
 			padding: 0;
 			width: 100%;
 			height: 100%;
-			background: #000;
+			/* Letterbox/pillarbox split to match bground.png: sky color (#CDC8FF, the stable
+			   sky shade from y=2 down — y=0 is a 1px anti-aliased edge, slightly darker and
+			   visibly mismatched) above the centered canvas, road color (#595959) below it,
+			   split at the vertical center since the canvas is always page-aligned to the
+			   middle (pageAlignVertically). */
+			background: linear-gradient(to bottom, #cdc8ff 0%, #cdc8ff 50%, #595959 50%, #595959 100%);
 			overflow: hidden;
 			touch-action: none;
 			-ms-touch-action: none;
@@ -53,6 +62,16 @@
 	</style>
 	<script type="text/javascript" src="phaser.js"></script>
 	<script type="text/javascript" src="mygame.js"></script>
+	<script>
+		// B4: register the service worker so the game is installable and works offline
+		if ('serviceWorker' in navigator) {
+			window.addEventListener('load', function () {
+				navigator.serviceWorker.register('sw.js').catch(function (err) {
+					console.warn('Service worker registration failed:', err);
+				});
+			});
+		}
+	</script>
 </head>
 <body>
 	<div id="phaser-example"></div>
