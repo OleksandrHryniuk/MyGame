@@ -69,6 +69,17 @@ function preload()
 function create()
 {
     game.physics.startSystem(Phaser.Physics.ARCADE);
+
+    // A2: responsive scaling — keep aspect ratio, fit any screen, centered
+    game.scale.scaleMode = Phaser.ScaleManager.SHOW_ALL;
+    game.scale.pageAlignHorizontally = true;
+    game.scale.pageAlignVertically = true;
+    // Landscape only: force horizontal, pause while the device is held in portrait
+    game.scale.forceOrientation(true, false);
+    game.scale.enterIncorrectOrientation.add(onIncorrectOrientation, this);
+    game.scale.leaveIncorrectOrientation.add(onCorrectOrientation, this);
+    game.scale.refresh();
+
     world.bground = game.add.tileSprite(0,0,700,400,'bground');
 
     world.player = game.add.sprite(30, 316, 'player', 1);
@@ -130,6 +141,21 @@ function spawnDelay()
     return Math.max(config.spawnMinDelay, config.spawnBase - (200 * state.gamespeed));
 }
 
+// True when a jump is requested; ignores taps landing on the on-screen UI buttons
+function jumpPressed()
+{
+    if(world.jumpkey.isDown) return true;
+    var p = game.input.activePointer;
+    if(!p.isDown) return false;
+    if(overButton(ui.pauseButton, p) || overButton(ui.infoButton, p)) return false;
+    return true;
+}
+
+function overButton(btn, p)
+{
+    return btn && btn.visible && btn.getBounds().contains(p.x, p.y);
+}
+
 function update()
 {
     game.physics.arcade.collide(world.player, world.layer);
@@ -179,7 +205,8 @@ function update()
     world.bground.tilePosition.x -= state.gamespeed;
     world.bananaScin.forEach(moveScin,this);
     world.bananaClear.forEach(moveBanana,this);
-    if (world.jumpkey.isDown && ( world.player.body.onFloor() || state.doubleJump) && game.time.now > state.jumptimer)
+    // A3: jump on keyboard SPACE or a screen tap (but not on the Pause/Info buttons)
+    if (jumpPressed() && ( world.player.body.onFloor() || state.doubleJump) && game.time.now > state.jumptimer)
     {
         world.player.animations.stop('run', true);
         world.player.body.velocity.y = -450;
@@ -293,6 +320,8 @@ function checkBanana(item)
 
 function actionOnClickPlay()
 {
+    // A4: first user gesture — make sure background music is unlocked/playing on mobile
+    if(!sounds.bg.isPlaying) sounds.bg.play();
     world.player.visible = true;
     ui.scoreText.visible = true;
     ui.gameName1.visible = false;
@@ -330,6 +359,17 @@ function actionOnClickPause()
         state.pausePlayerVelocityY = world.player.body.velocity.y;
         world.player.body.velocity.y = 0;
     }
+}
+
+// Landscape-only: freeze the game while the device is in portrait
+function onIncorrectOrientation()
+{
+    game.paused = true;
+}
+
+function onCorrectOrientation()
+{
+    game.paused = false;
 }
 
 function render(){}
