@@ -1,45 +1,55 @@
 var game = new Phaser.Game(700,400, Phaser.Auto, 'phaser-example', {preload:preload, create:create, update:update, render:render});
-var banana_scin;
-var banana_clear;
-var bckground;
-var jumpkey;
-var player;
-var jumptimer = 0;
-var map;
-var layer;
-var gamespeed = 1.5;
-var score = 0;
-var isEnd = false;
-var scin;
-var banana;
-var scoreText;
-var spawnBananaTimer = 0;
-var spawnScinTimer = 0;
-var scinCount = 0;
-var incrementSpeed = true;
-var loseText;
-var loseScore;
-var rand;
-var endAnimPlayed = false;
-var doubleJump = true;
-var replayButton;
-var startButton;
-var isStart = false;
-var gameName1; var gameName2;
-var infoButton;
-var infoImage;
-var pauseButton;
-var pauseText;
-var isPause = false;
-var pausePlayerVelocityY;
-var pauseKey;
-var bgSound;
-var fallSound;
-var jumpSound;
-var coinSound;
+
+// Tunable game configuration (speed curve lives here)
+var config = {
+    startSpeed: 1.5,      // speed at the beginning of a run
+    speedCap: 4.5,        // asymptote: speed approaches but never reaches this
+    approachFactor: 0.12, // fraction of remaining gap closed each step (smaller = smoother)
+    speedStep: 5,         // grow speed every N points
+    spawnBase: 2000,      // base spawn delay in ms
+    spawnMinDelay: 700    // never spawn faster than this (ms)
+};
+
+// Mutable per-run state (replaces many loose globals)
+var state = {
+    score: 0,
+    gamespeed: config.startSpeed,
+    jumptimer: 0,
+    spawnBananaTimer: 0,
+    spawnScinTimer: 0,
+    scinCount: 0,
+    incrementSpeed: true,
+    isEnd: false,
+    isStart: false,
+    isPause: false,
+    doubleJump: true,
+    endAnimPlayed: false,
+    pausePlayerVelocityY: 0,
+    rand: 0
+};
+
+// World entities / physics objects
+var world = {
+    player: null,
+    map: null,
+    layer: null,
+    bground: null,
+    bananaScin: null,
+    bananaClear: null,
+    scin: null,
+    jumpkey: null,
+    pauseKey: null
+};
+
+// UI elements (text + buttons + images)
+var ui = {};
+
+// Audio objects
+var sounds = {};
+
 function preload()
 {
- game.load.image('bground','assets/bground.png');  
+    game.load.image('bground','assets/bground.png');
     game.load.image('banana','assets/banana_clear.png');
     game.load.image('banana_scin','assets/banana_scin.png');
     game.load.spritesheet('player', 'assets/player2.png', 64, 64);
@@ -55,246 +65,271 @@ function preload()
     game.load.audio('coin_sound', 'assets/Coin.wav');
     game.load.audio('fall_sound', 'assets/slip_off_fall.wav');
 }
-function create()
-{    
-    game.physics.startSystem(Phaser.Physics.ARCADE);
-    bckground = game.add.tileSprite(0,0,700,400,'bground');   
-   
-    player = game.add.sprite(30, 316, 'player', 1);
-    game.physics.enable(player, Phaser.Physics.ARCADE);
-    player.body.collideWorldBounds = true;
-    player.body.setSize(44, 50, 20, 14);
-    player.animations.add('run', [0, 1, 2], 10, true, true);
-    player.animations.add('fall', [3, 4, 5, 6], 10, false);
-    player.visible = false;
-    
-    jumpkey = game.input.keyboard.addKey(Phaser.Keyboard.SPACEBAR);
-    pauseKey = game.input.keyboard.addKey(Phaser.Keyboard.ESC);
-    game.physics.arcade.gravity.y = 550;
-    map = game.add.tilemap('map', 70,20);
-    map.addTilesetImage('tileset');
-    map.setCollisionBetween(0,2);
-    layer = map.createLayer(0);
-    layer.resizeWorld;
-    layer.visible = false;
-    
-    banana_scin = game.add.group();
-    banana_scin.enableBody = true;
-    banana_clear = game.add.group();
-    banana_clear.enableBody = true;
-    
-    scoreText = game.add.text(5,5, 'Score: ', {font: ' 32px Arial', fill: '#ffff00'});
-    scoreText.visible = false;
-    loseText = game.add.text(game.world.centerX-80, game.world.centerY-70, 'You Lose', {font: '36px Arial', fill: '#fff000', align: 'center'});
-    loseText.visible = false;
-    loseScore = game.add.text(game.world.centerX-100, game.world.centerY+10, 'Your Score: ', {font: '32px Arial', fill:'#fff000', align: 'center'});
-    loseScore.visible = false;
-    gameName1 = game.add.text(game.world.centerX-155, game.world.centerY-100, 'BANANA', {font: '64px Arial Black', fill:'#fff000', align:'center'});
-    gameName2 = game.add.text(game.world.centerX-153, game.world.centerY-40, 'HUNTER', {font: '64px Arial Black', fill:'#fff000', align:'center'});
-    pauseText = game.add.text(game.world.centerX-100, game.world.centerY, 'PAUSE', {font: '64px Arial Black', fill:'#fff000', align:'center'});
-    pauseText.visible = false;
 
-    replayButton = game.add.button(game.world.centerX-50, game.world.centerY+70, 'replay', actionOnClickReplay, this, 0, 1, 0);
-    replayButton.visible = false;
-    replayButton.enable = false;
-    startButton = game.add.button(game.world.centerX-50, game.world.centerY+50, 'play', actionOnClickPlay, this, 0, 1, 0);
-    infoButton = game.add.button(game.world.width-50, game.world.height-50, 'info_button', actionOnClickInfo, this, 0, 1, 0);
-    pauseButton = game.add.button(game.world.width-70, 10, 'pause', actionOnClickPause, this, 0, 1, 0);
-    pauseButton.enable = false;
-    pauseButton.visible = false;
-    
-    infoImage = game.add.image(game.world.centerX-132, 10, 'info');
-    infoImage.visible = false;
-    
-    bgSound = game.add.audio('bgsound', 0.8, true);
-    bgSound.play();
-    jumpSound = game.add.audio('jump_sound', 1, false);
-    coinSound = game.add.audio('coin_sound', 1, false);
-    fallSound = game.add.audio('fall_sound', 1, false);
+function create()
+{
+    game.physics.startSystem(Phaser.Physics.ARCADE);
+    world.bground = game.add.tileSprite(0,0,700,400,'bground');
+
+    world.player = game.add.sprite(30, 316, 'player', 1);
+    game.physics.enable(world.player, Phaser.Physics.ARCADE);
+    world.player.body.collideWorldBounds = true;
+    world.player.body.setSize(44, 50, 20, 14);
+    world.player.animations.add('run', [0, 1, 2], 10, true, true);
+    world.player.animations.add('fall', [3, 4, 5, 6], 10, false);
+    world.player.visible = false;
+
+    world.jumpkey = game.input.keyboard.addKey(Phaser.Keyboard.SPACEBAR);
+    world.pauseKey = game.input.keyboard.addKey(Phaser.Keyboard.ESC);
+    game.physics.arcade.gravity.y = 550;
+    world.map = game.add.tilemap('map', 70,20);
+    world.map.addTilesetImage('tileset');
+    world.map.setCollisionBetween(0,2);
+    world.layer = world.map.createLayer(0);
+    world.layer.resizeWorld;
+    world.layer.visible = false;
+
+    world.bananaScin = game.add.group();
+    world.bananaScin.enableBody = true;
+    world.bananaClear = game.add.group();
+    world.bananaClear.enableBody = true;
+
+    ui.scoreText = game.add.text(5,5, 'Score: ', {font: ' 32px Arial', fill: '#ffff00'});
+    ui.scoreText.visible = false;
+    ui.loseText = game.add.text(game.world.centerX-80, game.world.centerY-70, 'You Lose', {font: '36px Arial', fill: '#fff000', align: 'center'});
+    ui.loseText.visible = false;
+    ui.loseScore = game.add.text(game.world.centerX-100, game.world.centerY+10, 'Your Score: ', {font: '32px Arial', fill:'#fff000', align: 'center'});
+    ui.loseScore.visible = false;
+    ui.gameName1 = game.add.text(game.world.centerX-155, game.world.centerY-100, 'BANANA', {font: '64px Arial Black', fill:'#fff000', align:'center'});
+    ui.gameName2 = game.add.text(game.world.centerX-153, game.world.centerY-40, 'HUNTER', {font: '64px Arial Black', fill:'#fff000', align:'center'});
+    ui.pauseText = game.add.text(game.world.centerX-100, game.world.centerY, 'PAUSE', {font: '64px Arial Black', fill:'#fff000', align:'center'});
+    ui.pauseText.visible = false;
+
+    ui.replayButton = game.add.button(game.world.centerX-50, game.world.centerY+70, 'replay', actionOnClickReplay, this, 0, 1, 0);
+    ui.replayButton.visible = false;
+    ui.replayButton.enable = false;
+    ui.startButton = game.add.button(game.world.centerX-50, game.world.centerY+50, 'play', actionOnClickPlay, this, 0, 1, 0);
+    ui.infoButton = game.add.button(game.world.width-50, game.world.height-50, 'info_button', actionOnClickInfo, this, 0, 1, 0);
+    ui.pauseButton = game.add.button(game.world.width-70, 10, 'pause', actionOnClickPause, this, 0, 1, 0);
+    ui.pauseButton.enable = false;
+    ui.pauseButton.visible = false;
+
+    ui.infoImage = game.add.image(game.world.centerX-132, 10, 'info');
+    ui.infoImage.visible = false;
+
+    sounds.bg = game.add.audio('bgsound', 0.8, true);
+    sounds.bg.play();
+    sounds.jump = game.add.audio('jump_sound', 1, false);
+    sounds.coin = game.add.audio('coin_sound', 1, false);
+    sounds.fall = game.add.audio('fall_sound', 1, false);
 }
+
+// Delay before the next spawn, based on current speed and clamped to a floor
+function spawnDelay()
+{
+    return Math.max(config.spawnMinDelay, config.spawnBase - (200 * state.gamespeed));
+}
+
 function update()
 {
-    game.physics.arcade.collide(player, layer);
-    game.physics.arcade.collide(scin, layer);
-    if(isStart){
-    if(!isEnd && !isPause){
-    game.physics.arcade.overlap(player, banana_clear, collisionBananaHandler, null, this);        
-    game.physics.arcade.overlap(player, banana_scin, collisionScinHandler, null, this);
-    player.body.velocity.x = 0;
-    if(score!=0 &&  score % 5 == 0 && incrementSpeed) {
-        gamespeed+=0.5;
-        incrementSpeed = false; }
-    if(score % 5 == 1) incrementSpeed = true;  
-    if(game.time.now > spawnBananaTimer)
+    game.physics.arcade.collide(world.player, world.layer);
+    game.physics.arcade.collide(world.scin, world.layer);
+    if(state.isStart){
+    if(!state.isEnd && !state.isPause){
+    game.physics.arcade.overlap(world.player, world.bananaClear, collisionBananaHandler, null, this);
+    game.physics.arcade.overlap(world.player, world.bananaScin, collisionScinHandler, null, this);
+    world.player.body.velocity.x = 0;
+    // Asymptotic speed curve: each step closes a fraction of the gap to speedCap,
+    // so speed always rises but by ever-smaller amounts and never reaches the cap.
+    if(state.score != 0 && state.score % config.speedStep == 0 && state.incrementSpeed) {
+        state.gamespeed += (config.speedCap - state.gamespeed) * config.approachFactor;
+        state.incrementSpeed = false; }
+    if(state.score % config.speedStep == 1) state.incrementSpeed = true;
+    if(game.time.now > state.spawnBananaTimer)
         {
-            rand = game.rnd.integerInRange(0,1);
-            if (rand)
+            state.rand = game.rnd.integerInRange(0,1);
+            if (state.rand)
                 {
                     create_banana();
-                    spawnBananaTimer = game.time.now + 2000 - (200 * gamespeed);
+                    state.spawnBananaTimer = game.time.now + spawnDelay();
                 }
             else
                 {
-                    spawnBananaTimer = game.time.now + 2000 - (200 * gamespeed);
+                    state.spawnBananaTimer = game.time.now + spawnDelay();
                 }
         }
-    if(game.time.now > spawnScinTimer)
+    if(game.time.now > state.spawnScinTimer)
         {
-            rand = game.rnd.integerInRange(0,1);
-            if (rand && scinCount < gamespeed)
+            state.rand = game.rnd.integerInRange(0,1);
+            if (state.rand && state.scinCount < state.gamespeed)
                 {
                     create_banana_scin();
-                    scinCount++;
-                    spawnScinTimer = game.time.now + 2000 - (200 * gamespeed);
+                    state.scinCount++;
+                    state.spawnScinTimer = game.time.now + spawnDelay();
                 }
             else
                 {
-                    spawnScinTimer = game.time.now + 2000 - (200 * gamespeed);
-                    scinCount = 0;
+                    state.spawnScinTimer = game.time.now + spawnDelay();
+                    state.scinCount = 0;
                 }
         }
-    if(player.body.onFloor()){
-    player.animations.play('run');
-    doubleJump = true;}
-    bckground.tilePosition.x -= gamespeed;
-    banana_scin.forEach(moveScin,this);
-    banana_clear.forEach(moveBanana,this);
-    if (jumpkey.isDown && ( player.body.onFloor() || doubleJump) && game.time.now > jumptimer)
+    if(world.player.body.onFloor()){
+    world.player.animations.play('run');
+    state.doubleJump = true;}
+    world.bground.tilePosition.x -= state.gamespeed;
+    world.bananaScin.forEach(moveScin,this);
+    world.bananaClear.forEach(moveBanana,this);
+    if (world.jumpkey.isDown && ( world.player.body.onFloor() || state.doubleJump) && game.time.now > state.jumptimer)
     {
-        player.animations.stop('run', true);
-        player.body.velocity.y = -450;
-        jumptimer = game.time.now + 550;
-        if(!player.body.onFloor())  doubleJump = false;
-        jumpSound.play();
+        world.player.animations.stop('run', true);
+        world.player.body.velocity.y = -450;
+        state.jumptimer = game.time.now + 550;
+        if(!world.player.body.onFloor())  state.doubleJump = false;
+        sounds.jump.play();
     }
-    scoreText.text = 'Score: ' + score;
-    banana_scin.forEach(checkScin, this);
-    banana_clear.forEach(checkBanana, this);
-    if(pauseKey.isDown) actionOnClickPause();
-    }else if(isEnd)
+    ui.scoreText.text = 'Score: ' + state.score;
+    world.bananaScin.forEach(checkScin, this);
+    world.bananaClear.forEach(checkBanana, this);
+    if(world.pauseKey.isDown) actionOnClickPause();
+    }else if(state.isEnd)
         {
-            player.animations.stop('run', true);
+            world.player.animations.stop('run', true);
             playEndAnim();
-            pauseButton.enable = false;
-            pauseButton.visible = false;
-            loseText.visible = true;
-            loseScore.text = 'Your Score: '+score;
-            loseScore.visible = true;
-            scoreText.visible = false;
-            replayButton.enable = true;
-            replayButton.visible = true;
+            ui.pauseButton.enable = false;
+            ui.pauseButton.visible = false;
+            ui.loseText.visible = true;
+            ui.loseScore.text = 'Your Score: '+state.score;
+            ui.loseScore.visible = true;
+            ui.scoreText.visible = false;
+            ui.replayButton.enable = true;
+            ui.replayButton.visible = true;
         }
-    }else if(isPause){}
+    }else if(state.isPause){}
 }
+
 function create_banana_scin()
 {
-    scin = banana_scin.create(699, 355, 'banana_scin');
-    scin.body.setSize(30, 25, 30, 0);
-    scin.body.gravity = 0;   
+    world.scin = world.bananaScin.create(699, 355, 'banana_scin');
+    world.scin.body.setSize(30, 25, 30, 0);
+    world.scin.body.gravity = 0;
 }
+
 function create_banana()
 {
-    banana = banana_clear.create(699, game.rnd.integerInRange(0,160)+150, 'banana');
+    var banana = world.bananaClear.create(699, game.rnd.integerInRange(0,160)+150, 'banana');
     banana.body.setSize(35,50,3,1);
     banana.body.gravity = 0;
 }
+
 function moveScin(item)
 {
-    item.body.position.x -= gamespeed;
+    item.body.position.x -= state.gamespeed;
 }
+
 function moveBanana(item)
 {
-    item.body.position.x -= gamespeed;
+    item.body.position.x -= state.gamespeed;
 }
+
 function collisionBananaHandler(player,banana)
 {
     banana.kill();
-    coinSound.play();
-    score++;
+    sounds.coin.play();
+    state.score++;
 }
+
 function collisionScinHandler(player,scin)
-{    
-    isEnd = true;
-    fallSound.play();
+{
+    state.isEnd = true;
+    sounds.fall.play();
 }
+
 function playEndAnim()
 {
-    if(!endAnimPlayed) 
+    if(!state.endAnimPlayed)
     {
-        player.animations.play('fall');
-        endAnimPlayed = true;
+        world.player.animations.play('fall');
+        state.endAnimPlayed = true;
     }
 }
+
 function actionOnClickReplay()
 {
-    score = 0;
-    gamespeed = 1.5;
-    jumptimer = 0;
-    spawnBananaTimer = 0;
-    spawnScinTimer = 0;
-    incrementSpeed = true;
-    endAnimPlayed = false;
-    scinCount = 0;
-    doubleJump = true;
-    banana_clear.forEach(deleteBanana, this);
-    banana_scin.forEach(deleteBanana, this);
-    scoreText.visible = true;
-    loseText.visible = false;
-    loseScore.visible = false;
-    replayButton.enable = false;
-    replayButton.visible = false;
-    pauseButton.enable = true;
-    pauseButton.visible = true;
-    isEnd = false;
+    state.score = 0;
+    state.gamespeed = config.startSpeed;
+    state.jumptimer = 0;
+    state.spawnBananaTimer = 0;
+    state.spawnScinTimer = 0;
+    state.incrementSpeed = true;
+    state.endAnimPlayed = false;
+    state.scinCount = 0;
+    state.doubleJump = true;
+    world.bananaClear.forEach(deleteBanana, this);
+    world.bananaScin.forEach(deleteBanana, this);
+    ui.scoreText.visible = true;
+    ui.loseText.visible = false;
+    ui.loseScore.visible = false;
+    ui.replayButton.enable = false;
+    ui.replayButton.visible = false;
+    ui.pauseButton.enable = true;
+    ui.pauseButton.visible = true;
+    state.isEnd = false;
 }
+
 function deleteBanana(item)
 {
     item.kill();
 }
+
 function checkScin(item)
 {
     if(item.body.position.x < -69 || item.body.position.y > 399) item.kill();
 }
+
 function checkBanana(item)
 {
     if(item.body.position.x < -40 || item.body.position.y > 399) item.kill();
 }
+
 function actionOnClickPlay()
 {
-    player.visible = true;
-    scoreText.visible = true;
-    gameName1.visible = false;
-    gameName2.visible = false;
-    startButton.enable = false;
-    startButton.visible =false;
-    pauseButton.enable = true;
-    pauseButton.visible = true;
-    isStart = true;
+    world.player.visible = true;
+    ui.scoreText.visible = true;
+    ui.gameName1.visible = false;
+    ui.gameName2.visible = false;
+    ui.startButton.enable = false;
+    ui.startButton.visible = false;
+    ui.pauseButton.enable = true;
+    ui.pauseButton.visible = true;
+    state.isStart = true;
 }
+
 function actionOnClickInfo()
 {
-    if(infoImage.visible) infoImage.visible = false;
-    else infoImage.visible = true;
+    if(ui.infoImage.visible) ui.infoImage.visible = false;
+    else ui.infoImage.visible = true;
 }
+
 function actionOnClickPause()
 {
-    if(isPause)
+    if(state.isPause)
         {
-            isPause = false;
-            pauseText.visible = false;
-            player.animations.play('run');
+            state.isPause = false;
+            ui.pauseText.visible = false;
+            world.player.animations.play('run');
             game.physics.arcade.gravity.y = 550;
-            player.body.velocity.y = pausePlayerVelocityY;
+            world.player.body.velocity.y = state.pausePlayerVelocityY;
         }
     else
     {
-        isPause = true;
-        pauseText.visible = true;
-        player.animations.stop('run', false);
-        player.animations.stop();
+        state.isPause = true;
+        ui.pauseText.visible = true;
+        world.player.animations.stop('run', false);
+        world.player.animations.stop();
         game.physics.arcade.gravity.y = 0;
-        pausePlayerVelocityY = player.body.velocity.y;
-        player.body.velocity.y = 0;
+        state.pausePlayerVelocityY = world.player.body.velocity.y;
+        world.player.body.velocity.y = 0;
     }
 }
+
 function render(){}
